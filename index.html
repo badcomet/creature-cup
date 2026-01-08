@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wondrous Creatures: Mega Cup</title>
+    <style>
+        body { background: #0b2d1a; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 15px; }
+        h1 { color: #ffd700; font-size: 1.5rem; margin-bottom: 5px; }
+        .step-bar { background: #1a4d31; height: 10px; border-radius: 5px; margin: 15px auto; max-width: 500px; overflow: hidden; }
+        .step-progress { background: #ffd700; height: 100%; transition: 0.3s; width: 5%; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 600px; margin: 0 auto; padding-bottom: 100px; }
+        .grid-item { cursor: pointer; border: 2px solid transparent; border-radius: 8px; background: rgba(0,0,0,0.2); padding: 4px; transition: 0.2s; }
+        .grid-item img { width: 100%; border-radius: 5px; pointer-events: none; }
+        .grid-item.selected { border-color: #ffd700; background: rgba(255, 215, 0, 0.3); transform: scale(0.95); }
+        .footer-controls { position: fixed; bottom: 0; left: 0; right: 0; background: #0b2d1a; padding: 20px; border-top: 1px solid #1a4d31; z-index: 100; }
+        button { background: #ffd700; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1.1rem; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        button:disabled { background: #444; color: #888; }
+        #final-screen { display: none; padding-top: 50px; }
+        .winner-img { width: 280px; border: 5px solid #ffd700; border-radius: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h1 id="title-text">Select 18 Favorites</h1>
+        <div class="step-bar"><div id="progress-fill" class="step-progress"></div></div>
+        <p id="counter-text">Selected: 0 / 18</p>
+        
+        <div class="grid" id="main-grid"></div>
+
+        <div class="footer-controls">
+            <button id="next-btn" onclick="nextStep()" disabled>Lock in Picks</button>
+        </div>
+    </div>
+
+    <div id="final-screen">
+        <h1>🏆 Your #1 Champion!</h1>
+        <div id="final-winner"></div>
+        <h2 id="winner-name" style="color:#ffd700; margin: 20px 0;"></h2>
+        <p>Your vote has been recorded!</p>
+        <button onclick="location.reload()">Vote Again</button>
+    </div>
+
+    <script>
+        const GITHUB_USER = "BAD COMET";
+        const REPO_NAME = "creature-cup";
+        const GOOGLE_URL = "https://script.google.com/macros/s/AKfycbwsS7xg_mpikq2S8J4TIIty9lpqjU1z9OsIlCfrQaQ7amB3ba8iBwGFezliZbPSV6i5YA/exec";
+
+        let allCards = [];
+        let currentPool = [];
+        let selection = [];
+        let step = 1; // 1: 126->18, 2: 18->6, 3: 6->2, 4: 2->1
+
+        async function loadCards() {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/`);
+            const files = await response.json();
+            allCards = files
+                .filter(f => f.name.match(/\.(png|jpg|jpeg|webp)$/i))
+                .map(f => ({
+                    name: f.name.split('.')[0].replace(/-/g, ' ').replace(/_/g, ' '),
+                    url: `https://${GITHUB_USER}.github.io/${REPO_NAME}/${f.name}`
+                })).sort(() => Math.random() - 0.5);
+            
+            currentPool = [...allCards];
+            renderGrid();
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = '';
+            // Make grid items larger as pool gets smaller
+            if(step >= 3) grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+            if(step === 4) grid.style.gridTemplateColumns = 'repeat(1, 1fr)';
+
+            currentPool.forEach(card => {
+                const div = document.createElement('div');
+                div.className = 'grid-item' + (selection.includes(card) ? ' selected' : '');
+                div.innerHTML = `<img src="${card.url}">`;
+                div.onclick = () => handleSelect(card, div);
+                grid.appendChild(div);
+            });
+            window.scrollTo(0,0);
+        }
+
+        function handleSelect(card, el) {
+            const limits = { 1: 18, 2: 6, 3: 2, 4: 1 };
+            const limit = limits[step];
+            
+            if (selection.includes(card)) {
+                selection = selection.filter(c => c !== card);
+                el.classList.remove('selected');
+            } else if (selection.length < limit) {
+                selection.push(card);
+                el.classList.add('selected');
+            }
+            document.getElementById('counter-text').innerText = `Selected: ${selection.length} / ${limit}`;
+            document.getElementById('next-btn').disabled = selection.length !== limit;
+        }
+
+        function nextStep() {
+            if (step < 4) {
+                currentPool = [...selection];
+                selection = [];
+                step++;
+                const titles = { 2: "Select Top 6", 3: "Select Top 2", 4: "THE FINAL CHOICE" };
+                const progress = { 2: 33, 3: 66, 4: 90 };
+                document.getElementById('title-text').innerText = titles[step];
+                document.getElementById('progress-fill').style.width = progress[step] + "%";
+                document.getElementById('counter-text').innerText = `Selected: 0 / ${step === 2 ? 6 : (step === 3 ? 2 : 1)}`;
+                document.getElementById('next-btn').disabled = true;
+                renderGrid();
+            } else {
+                finishGame(selection[0]);
+            }
+        }
+
+        function finishGame(champion) {
+            document.getElementById('game-container').style.display = 'none';
+            document.getElementById('final-screen').style.display = 'block';
+            document.getElementById('final-winner').innerHTML = `<img src="${champion.url}" class="winner-img">`;
+            document.getElementById('winner-name').innerText = champion.name;
+            fetch(GOOGLE_URL, { method: "POST", mode: "no-cors", body: JSON.stringify({ winner: champion.name }) });
+        }
+
+        loadCards();
+    </script>
+</body>
+</html>
